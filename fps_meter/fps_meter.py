@@ -24,6 +24,7 @@ trace method: workq
  ^
  1 : Frame update count detected in this 1/60 sec interval.
 """
+import argparse
 import atexit
 import collections
 import os
@@ -154,17 +155,18 @@ def start_notify_thread():
   notify_thread.start()
 
 
-def process_trace_buffer(trace_buffer, end_time):
+def process_trace_buffer(trace_buffer, end_time, verbose=False):
   # Checks all vblanks in the range [end_time - 1.0, end_time].
   frame_info = []
   step = 1.0 / REFRESH_RATE
   step_time = end_time - 1.0 + step
   fps_count = 0
+  frame_times = []
   for _ in range(REFRESH_RATE):
     # Checks if there are vblanks in a refresh interval.
     step_count = 0
     while trace_buffer and trace_buffer[0] < step_time:
-      trace_buffer.popleft()
+      frame_times.append(trace_buffer.popleft())
       step_count += 1
 
     # Each character represent an 1 / REFRESH_RATE interval.
@@ -180,9 +182,11 @@ def process_trace_buffer(trace_buffer, end_time):
 
   frame_info_str = ''.join(frame_info)
   print '[%s] FPS: %2d' % (frame_info_str, fps_count)
+  if frame_times and verbose:
+    print ', '.join(['%.3f' % t for t in frame_times])
 
 
-def main_loop(trace_method):
+def main_loop(trace_method, verbose=False):
   """Main loop to parse the trace.
 
   There are 2 threads involved:
@@ -226,12 +230,18 @@ def main_loop(trace_method):
         m_notify = re_notify.match(line)
         if m_notify:
           timestamp = float(m_notify.group(1))
-          process_trace_buffer(trace_buffer, timestamp)
+          process_trace_buffer(trace_buffer, timestamp, verbose)
 
 
 if __name__ == '__main__':
+  # parsing arguments
+  parser = argparse.ArgumentParser(description='Print fps infomation.')
+  parser.add_argument('-v', dest='verbose', action='store_true',
+                      help='print verbose frame time info')
+  args = parser.parse_args()
+
   trace_method = get_trace_method()
   print 'trace method:', trace_method
   enable_tracing(trace_method)
-  main_loop(trace_method)
+  main_loop(trace_method, args.verbose)
 
